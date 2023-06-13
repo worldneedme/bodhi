@@ -1,0 +1,4 @@
+function help_echo
+echo '(./)app'
+end
+

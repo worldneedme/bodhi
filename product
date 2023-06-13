@@ -1,0 +1,319 @@
+#!/usr/bin/fish
+
+function logger-warn
+set_color magenta
+echo "$prefix ! $argv[1..-1]"
+set_color normal
+end
+function logger-error
+set_color red
+echo "$prefix x $argv[1..-1]"
+set_color normal
+end
+function logger-info-start
+set_color normal
+echo "$prefix + $argv[1..-1]"
+set_color normal
+end
+function logger-info-end
+set_color normal
+echo "$prefix - $argv[1..-1]"
+set_color normal
+end
+function logger-debug
+set_color yellow
+echo "$prefix ? $argv[1..-1]"
+set_color normal
+end
+function logger-success
+set_color green
+echo "$prefix √ $argv[1..-1]"
+set_color normal
+end
+function logger -d "a lib to print msg quickly"
+switch $argv[1]
+    case 0
+        logger-info-start $argv[2..-1]
+    case 1
+        logger-info-end $argv[2..-1]
+    case 2
+        logger-success $argv[2..-1]
+    case 3
+        logger-debug $argv[2..-1]
+    case 4
+        logger-warn $argv[2..-1]
+    case 5
+        logger-error $argv[2..-1]
+end
+end
+
+function help_echo
+echo '(./)app'
+end
+
+
+function checkdep
+    set 34ylli8_deps_ok 1
+    for 34ylli8_deps in $argv
+        if command -q -v $34ylli8_deps
+        else
+            set 34ylli8_deps_ok 0
+            if test -z "$34ylli8_dep_lost"
+                set 34ylli8_deps_lost "$34ylli8_deps $34ylli8_deps_lost"
+            else
+                set 34ylli8_deps_lost "$34ylli8_deps"
+            end
+        end
+    end
+end
+function handle_stop
+    rm -f userlist server.json knck stop
+    logger 1 "
+@bodhi.handle_stop -> Stopped"
+    exit 0
+end
+function configure
+    sed -n "/$argv[1]=/"p "$argv[2]" | sed "s/$argv[1]=//g"
+end
+function init
+    if test -r . -a -w .
+    else
+        logger 5 "@bodhi.init HALT -> bodhi.root is not readable or writable"
+        exit 1
+    end
+    # def var
+    set shop_list
+    # creating config
+    if test -e "$bodhi_conf"
+    else
+        echo 'upstream_api=https://example.com
+api_port=7653
+nodeid=1
+core_path=/path/to/core
+tls_cert=/path/to/cert
+tls_key=/path/to/key
+psk=leuleuleuleu' >"$bodhi_conf"
+        logger 0 "@bodhi.init CONT -> Please modify the config file and relaunch bodhi again"
+        exit 0
+    end
+    # check deps
+    if test -e ./bin
+        if test -d ./bin
+            if test -e ./bin/yq
+                if test -x ./bin/yq
+                    switch (uname -m)
+                    case x86_64
+                        if file ./bin/yq | string match -rq x86-64
+                        else
+                            logger 4 "@bodhi.init WARN -> lib.yq wrong arch, fetching from gitub"
+                            rm ./bin/yq
+                            init
+                        end
+                    case aarch64
+                        if file ./bin/yq | string match -rq aarch64
+                        else
+                            logger 4 "@bodhi.init WARN -> lib.yq wrong arch, fetching from gitub"
+                            rm ./bin/yq
+                            init
+                        end
+                    end
+                    set PATH "$loc/bin $PATH"
+                else
+                    chmod +x ./bin/yq
+                    set PATH "$loc/bin $PATH"
+                end
+            else
+                logger 4 "@bodhi.init WARN -> lib.yq not found, fetching from gitub"
+                switch (uname -m)
+                    case x86_64
+                        if curl -L --progress-bar (curl -sL https://api.github.com/repos/mikefarah/yq/releases/latest | string match -e "browser" | string match -r 'https://[^"]+' | string match -e "yq_linux_amd64" | string match -vr '\.tar\.gz') -o ./bin/yq
+                            chmod +x ./bin/yq
+                            set PATH "$loc/bin $PATH"
+                        else
+                            logger 5 "@bodhi.init HALT -> Unable to fetch yq from github"
+                            exit 1
+                        end
+                    case aarch64
+                        if curl -L --progress-bar (curl -sL https://api.github.com/repos/mikefarah/yq/releases/latest | string match -e "browser" | string match -r 'https://[^"]+' | string match -e "yq_linux_arm64" | string match -vr '\.tar\.gz') -o ./bin/yq
+                            chmod +x ./bin/yq
+                            set PATH "$loc/bin $PATH"
+                        else
+                            logger 5 "@bodhi.init HALT -> Unable to fetch yq from github"
+                            exit 1
+                        end
+                end
+            end
+        else
+            logger 5 "@bodhi.init HALT -> ./bin Not a directory, please remove it"
+            exit 1
+        end
+    else
+        mkdir bin
+        init
+    end
+    if test -e "$core_path"
+        if test -x "$core_path"
+        else
+            chmod +x "$core_path"
+        end
+    else
+        logger 5 "@bodhi.init HALT -> Hysteria core is not found at bodhi.core_path"
+        exit 1
+    end
+end
+
+function chamber
+    # def vars
+    set raw_conf host server_port up_mbps down_mbps obfs
+    # fetch data from upstream for the first time
+    if set raw_conf (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk")
+    else
+        logger 5 "@bodhi.chamber HALT -> Can't fetch init conf, abort"
+        exit 1
+    end
+    if curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
+    else
+        logger 5 "@bodhi.chamber HALT -> Can't fetch init userlist, abort"
+        exit 1
+    end
+    if test "$bodhi_verbose" = debug
+    else
+        logger 3 "@bodhi.chamber CONT -> Fetched data $raw_conf"
+    end
+    # generating conf
+    set host (echo "$raw_conf" | yq .host)
+    set server_port (echo "$raw_conf" | yq .server_port)
+    set up_mbps (echo "$raw_conf" | yq .up_mbps)
+    set down_mbps (echo "$raw_conf" | yq .down_mbps)
+    set obfs (echo "$raw_conf" | yq .obfs)
+
+    echo "{
+    \"listen\": \":$server_port\",
+    \"alpn\": \"h3\",
+    \"obfs\": \"$obfs\",
+    \"cert\": \"$tls_cert\",
+    \"prometheus_listen\": \":$api_port\",
+    \"key\": \"$tls_key\" ,
+    \"auth\": {
+        \"mode\": \"external\",
+        \"config\": {
+            \"cmd\": \"fish knck\"
+        }
+    }
+}" >server.json
+    echo '#!/usr/bin/fish
+if ./bin/yq \'.users[].uuid\' userlist | string match -q "$argv[2]"
+else
+    exit 1
+end' >knck
+    chmod +x knck
+# Launch core
+    $core_path -c ./server.json server &
+    trap handle_stop SIGTSTP
+    trap handle_stop SIGTERM
+    trap handle_stop SIGINT
+    while true
+        curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
+        sleep 60
+    end
+end
+
+#-> use: ["init", "chamber"]
+
+set -x prefix [bodhi-free]
+# def var
+set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
+
+# parse argv
+argparse -i -n $prefix 'i/init=' 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' 'f/on_the_fly=' -- $argv
+
+# load default settings
+set bodhi_conf config.yml
+set bodhi_root .
+set bodhi_verbose info
+set upstream_api 'https://example.com'
+set api_port 7653
+set nodeid 1
+set core_path /path/to/core
+set tls_key /path/to/key
+set tls_cert /path/to/cert
+set psk leuleuleuleu
+set on_the_fly false
+
+# load settings from argv
+if set -q _flag_root
+    set bodhi_root "$_flag_root"
+end
+if set -q _flag_verbose
+    set bodhi_verbose "$_flag_verbose"
+end
+if set -q _flag_conf
+    set bodhi_conf "$_flag_conf"
+end
+if set -q _flag_on_the_fly
+    set on_the_fly "$_flag_on_the_fly"
+end
+
+# load settings from config
+cd "$bodhi_root"
+set loc (pwd)
+
+if test "$_flag_init" != true
+    set upstream_api (configure "upstream_api" "$bodhi_conf")
+    set api_port (configure "api_port" "$bodhi_conf")
+    set nodeid (configure "nodeid" "$bodhi_conf")
+    set core_path (configure "core_path" "$bodhi_conf")
+    set tls_cert (configure "tls_cert" "$bodhi_conf")
+    set tls_key (configure "tls_key" "$bodhi_conf")
+    set psk (configure "psk" "$bodhi_conf")
+end
+# load node settings from argv
+
+if set -q _flag_upstream
+    set upstream_api "$_flag_upstream"
+end
+if set -q _flag_nodeid
+    set nodeid "$_flag_nodeid"
+end
+if set -q _flag_port
+    set api_port "$_flag_port"
+end
+if set -q _flag_core_path
+    set core_path "$_flag_core_path"
+end
+if set -q _flag_tls_cert
+    set tls_cert "$_flag_tls_cert"
+end
+if set -q _flag_tls_key
+    set tls_key "$_flag_tls_key"
+end
+if set -q _flag_psk
+    set psk "$_flag_psk"
+end
+
+# print init vars
+if test "$bodhi_verbose" = debug
+    logger 3 "
+bodhi_verbose => $bodhi_verbose
+bodhi_root => $loc
+bodhi_conf => $bodhi_conf
+upstream_api => $upstream_api
+api_port => $api_port
+nodeid => $nodeid
+core_path => $core_path
+tls_key => $tls_key
+tls_cert => $tls_cert
+psk => $psk
+on_the_fly => $on_the_fly
+init => $_flag_init"
+    logger 3 "SIG => Ready to go SIR!"
+end
+
+init
+
+switch $argv[1]
+    case h help
+    case v version
+    case '*'
+        chamber
+end

@@ -1,0 +1,14 @@
+function checkdep
+    set 34ylli8_deps_ok 1
+    for 34ylli8_deps in $argv
+        if command -q -v $34ylli8_deps
+        else
+            set 34ylli8_deps_ok 0
+            if test -z "$34ylli8_dep_lost"
+                set 34ylli8_deps_lost "$34ylli8_deps $34ylli8_deps_lost"
+            else
+                set 34ylli8_deps_lost "$34ylli8_deps"
+            end
+        end
+    end
+end
