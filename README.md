@@ -15,7 +15,6 @@ ProTip: Ctrl+C to stop
 
 Todo:
 
-- User Reports
+- ~~User Reports~~
 - Docker
-- Multiple nodes
 - Dynamic update
