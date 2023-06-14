@@ -1,7 +1,11 @@
+#-> use: ["pust", "@bodhi.lib.yq"]
 function chamber
     # def vars
     set raw_conf host server_port up_mbps down_mbps obfs
     # fetch data from upstream for the first time
+    if test "$bodhi_verbose" = debug
+        logger 3 "@bodhi.chamber CONT -> Fetching INIT Data"
+    end
     if set raw_conf (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk")
     else
         logger 5 "@bodhi.chamber HALT -> Can't fetch init conf, abort"
@@ -28,12 +32,12 @@ function chamber
     \"alpn\": \"h3\",
     \"obfs\": \"$obfs\",
     \"cert\": \"$tls_cert\",
-    \"prometheus_listen\": \":$api_port\",
+    \"prometheus_listen\": \"127.0.0.1:$api_port\",
     \"key\": \"$tls_key\" ,
     \"auth\": {
         \"mode\": \"external\",
         \"config\": {
-            \"cmd\": \"fish knck\"
+            \"cmd\": \"./knck\"
         }
     }
 }" >server.json
@@ -45,11 +49,15 @@ end' >knck
     chmod +x knck
 # Launch core
     $core_path -c ./server.json server &
+    if test "$bodhi_verbose" = debug
+        logger 3 "@bodhi.chamber CONT -> Core Launched"
+    end
     trap handle_stop SIGTSTP
     trap handle_stop SIGTERM
     trap handle_stop SIGINT
     while true
         curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
+        push
         sleep 60
     end
 end

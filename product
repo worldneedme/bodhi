@@ -48,7 +48,35 @@ end
 end
 
 function help_echo
-echo '(./)app'
+echo 'Dear user, this is a manual for bodhi - the open source hysteria backend by lotusproxy
+In this manual,we`ll introduce how can you use our products.
+
+A. Bedrock mode: run with config file
+ 1. Do "./product -i -v debug" to generate config files and download dependence
+ 2. modify ./config.ini
+    upstream_api=https://example.com <- board address
+    api_port=7653 <- Hysteria api port
+    nodeid=1 <- remote nodeID
+    core_path=/path/to/core <- path to hysteria executable
+    tls_cert=/path/to/cert <-path to tls cert
+    tls_key=/path/to/key <- path to tls key
+    psk=leuleuleuleu <- password for nodeAPI
+ 3. After you finish that, ./product to launch
+ 4. CTRL+c or SIGINT to stop bodhi safely
+
+B. OTF(On The Fly) mode: run with args
+    -v/--verbose= [debug/info]
+    -d/--root= [Root for running]
+    -p/--port= [Hysteria api port]
+    -u/--upstream= [Board address]
+    -n/--nodeid= [Remote nodeID]
+    -o/--tls_cert= [Path to cert]
+    -k/--tls_key= [Path to key]
+    -q/--core_path= [Path to core]
+    -r/--psk= [Password for nodeAPI]
+    -f/--on_the_fly [Must Have when using OTF mode]
+    
+*END' 
 end
 
 
@@ -68,8 +96,8 @@ function checkdep
 end
 function handle_stop
     rm -f userlist server.json knck stop
-    logger 1 "
-@bodhi.handle_stop -> Stopped"
+    echo
+    logger 2 "@bodhi.handle_stop -> Stopped"
     exit 0
 end
 function configure
@@ -83,39 +111,26 @@ function init
     end
     # def var
     set shop_list
-    # creating config
-    if test -e "$bodhi_conf"
-    else
-        echo 'upstream_api=https://example.com
-api_port=7653
-nodeid=1
-core_path=/path/to/core
-tls_cert=/path/to/cert
-tls_key=/path/to/key
-psk=leuleuleuleu' >"$bodhi_conf"
-        logger 0 "@bodhi.init CONT -> Please modify the config file and relaunch bodhi again"
-        exit 0
-    end
     # check deps
     if test -e ./bin
         if test -d ./bin
             if test -e ./bin/yq
                 if test -x ./bin/yq
                     switch (uname -m)
-                    case x86_64
-                        if file ./bin/yq | string match -rq x86-64
-                        else
-                            logger 4 "@bodhi.init WARN -> lib.yq wrong arch, fetching from gitub"
-                            rm ./bin/yq
-                            init
-                        end
-                    case aarch64
-                        if file ./bin/yq | string match -rq aarch64
-                        else
-                            logger 4 "@bodhi.init WARN -> lib.yq wrong arch, fetching from gitub"
-                            rm ./bin/yq
-                            init
-                        end
+                        case x86_64
+                            if file ./bin/yq | string match -rq x86-64
+                            else
+                                logger 4 "@bodhi.init WARN -> lib.yq wrong arch, fetching from gitub"
+                                rm ./bin/yq
+                                init
+                            end
+                        case aarch64
+                            if file ./bin/yq | string match -rq aarch64
+                            else
+                                logger 4 "@bodhi.init WARN -> lib.yq wrong arch, fetching from gitub"
+                                rm ./bin/yq
+                                init
+                            end
                     end
                     set PATH "$loc/bin $PATH"
                 else
@@ -151,6 +166,23 @@ psk=leuleuleuleu' >"$bodhi_conf"
         mkdir bin
         init
     end
+    # creating config
+    if set -q _flag_on_the_fly
+    else
+        if test -e "$bodhi_conf"
+        else
+            echo 'upstream_api=https://example.com
+api_port=7653
+nodeid=1
+core_path=/path/to/core
+tls_cert=/path/to/cert
+tls_key=/path/to/key
+psk=leuleuleuleu' >"$bodhi_conf"
+            logger 0 "@bodhi.init CONT -> Please modify the config file and relaunch bodhi again"
+            exit 0
+        end
+    end
+    # Check core
     if test -e "$core_path"
         if test -x "$core_path"
         else
@@ -162,10 +194,62 @@ psk=leuleuleuleu' >"$bodhi_conf"
     end
 end
 
+function push
+    #def vars
+    set users raw_statis
+    # Create UserTable
+    set users (yq '.users[].id' userlist)
+    # Map id <=> uuid <=> base64_authstr
+    for user in $users
+        set uuid[$user] (yq ".users[]|select(.id == $user)|.uuid" userlist)
+        set basestr[$user] (echo -n "$uuid[$user]" | base64)
+    end
+    # fetch data from api
+    set raw_statis (curl -sL "http://127.0.0.1:$api_port/metrics" | string collect)
+    if test -z $raw_statis
+        if test "$bodhi_verbose" = debug
+            logger 3 "@bodhi.push CONT -> No user, report empty"
+        end
+    else
+        # Loop to collect data High-Passly
+        for line_stat in (curl -sL "http://127.0.0.1:$api_port/metrics")
+            if string match -q '*'\#'*' -- $line_stat; or string match -q '*active_conn*' -- $line_stat
+            else
+                set line_id (contains --index -- (string match -r 'auth="(.+?)"' $line_stat)[2] $basestr)
+                if string match -rq uplink -- $line_stat
+                    set upload[$line_id] (math (string split ' ' -- $line_stat)[2])
+                else
+                    set download[$line_id] (math (string split ' ' -- $line_stat)[2])
+                end
+            end
+        end
+        # compose json data
+        set return_data '{}'
+        for user in $users
+            if test -z $upload[$user]; and test -z $download[$user]
+            else
+                set return_data (echo -n "$return_data" | yq -o=json ".$user = [$upload[$user], $download[$user]]")
+            end
+        end
+        if test "$bodhi_verbose" = debug
+            logger 3 "@bodhi.push CONT -> Ready to push with following data"
+            logger 3 "
+$return_data"
+        end
+        # Report data to panel
+        set clength (echo -n "$return_data" | wc -c)
+        curl -sL -X POST -H "Content-Type: application/json" -H "Content-Length: $clength" -d "$return_data" "$upstream_api/api/v1/server/UniProxy/push?node_id=$nodeid&node_type=hysteria&token=$psk" | yq
+    end
+end
+
+#-> use: ["pust", "@bodhi.lib.yq"]
 function chamber
     # def vars
     set raw_conf host server_port up_mbps down_mbps obfs
     # fetch data from upstream for the first time
+    if test "$bodhi_verbose" = debug
+        logger 3 "@bodhi.chamber CONT -> Fetching INIT Data"
+    end
     if set raw_conf (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk")
     else
         logger 5 "@bodhi.chamber HALT -> Can't fetch init conf, abort"
@@ -192,12 +276,12 @@ function chamber
     \"alpn\": \"h3\",
     \"obfs\": \"$obfs\",
     \"cert\": \"$tls_cert\",
-    \"prometheus_listen\": \":$api_port\",
+    \"prometheus_listen\": \"127.0.0.1:$api_port\",
     \"key\": \"$tls_key\" ,
     \"auth\": {
         \"mode\": \"external\",
         \"config\": {
-            \"cmd\": \"fish knck\"
+            \"cmd\": \"./knck\"
         }
     }
 }" >server.json
@@ -209,91 +293,98 @@ end' >knck
     chmod +x knck
 # Launch core
     $core_path -c ./server.json server &
+    if test "$bodhi_verbose" = debug
+        logger 3 "@bodhi.chamber CONT -> Core Launched"
+    end
     trap handle_stop SIGTSTP
     trap handle_stop SIGTERM
     trap handle_stop SIGINT
     while true
         curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
+        push
         sleep 60
     end
 end
 
 #-> use: ["init", "chamber"]
 
-set -x prefix [bodhi-free]
-# def var
-set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
+set -x prefix [Bodhi]
+switch $argv[1]
+    case h help
+        help_echo
+    case v version
+        logger 0 'ThiMau@build1'
+    case '*'
+        # def var
+        set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
 
-# parse argv
-argparse -i -n $prefix 'i/init=' 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' 'f/on_the_fly=' -- $argv
+        # parse argv
+        argparse -i -n $prefix i/init 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' f/on_the_fly -- $argv
 
-# load default settings
-set bodhi_conf config.yml
-set bodhi_root .
-set bodhi_verbose info
-set upstream_api 'https://example.com'
-set api_port 7653
-set nodeid 1
-set core_path /path/to/core
-set tls_key /path/to/key
-set tls_cert /path/to/cert
-set psk leuleuleuleu
-set on_the_fly false
+        # load default settings
+        set bodhi_conf config.ini
+        set bodhi_root .
+        set bodhi_verbose info
+        set upstream_api 'https://example.com'
+        set api_port 7653
+        set nodeid 1
+        set core_path /path/to/core
+        set tls_key /path/to/key
+        set tls_cert /path/to/cert
+        set psk leuleuleuleu
 
-# load settings from argv
-if set -q _flag_root
-    set bodhi_root "$_flag_root"
-end
-if set -q _flag_verbose
-    set bodhi_verbose "$_flag_verbose"
-end
-if set -q _flag_conf
-    set bodhi_conf "$_flag_conf"
-end
-if set -q _flag_on_the_fly
-    set on_the_fly "$_flag_on_the_fly"
-end
+        # load settings from argv
+        if set -q _flag_root
+            set bodhi_root "$_flag_root"
+        end
+        if set -q _flag_verbose
+            set bodhi_verbose "$_flag_verbose"
+        end
+        if set -q _flag_conf
+            set bodhi_conf "$_flag_conf"
+        end
 
-# load settings from config
-cd "$bodhi_root"
-set loc (pwd)
+        # load settings from config
+        cd "$bodhi_root"
+        set loc (pwd)
 
-if test "$_flag_init" != true
-    set upstream_api (configure "upstream_api" "$bodhi_conf")
-    set api_port (configure "api_port" "$bodhi_conf")
-    set nodeid (configure "nodeid" "$bodhi_conf")
-    set core_path (configure "core_path" "$bodhi_conf")
-    set tls_cert (configure "tls_cert" "$bodhi_conf")
-    set tls_key (configure "tls_key" "$bodhi_conf")
-    set psk (configure "psk" "$bodhi_conf")
-end
-# load node settings from argv
+        if set -q _flag_init; or set -q _flag_on_the_fly
+        else
+            set upstream_api (configure "upstream_api" "$bodhi_conf")
+            set api_port (configure "api_port" "$bodhi_conf")
+            set nodeid (configure "nodeid" "$bodhi_conf")
+            set core_path (configure "core_path" "$bodhi_conf")
+            set tls_cert (configure "tls_cert" "$bodhi_conf")
+            set tls_key (configure "tls_key" "$bodhi_conf")
+            set psk (configure "psk" "$bodhi_conf")
+        end
+        # load node settings from argv
 
-if set -q _flag_upstream
-    set upstream_api "$_flag_upstream"
-end
-if set -q _flag_nodeid
-    set nodeid "$_flag_nodeid"
-end
-if set -q _flag_port
-    set api_port "$_flag_port"
-end
-if set -q _flag_core_path
-    set core_path "$_flag_core_path"
-end
-if set -q _flag_tls_cert
-    set tls_cert "$_flag_tls_cert"
-end
-if set -q _flag_tls_key
-    set tls_key "$_flag_tls_key"
-end
-if set -q _flag_psk
-    set psk "$_flag_psk"
-end
+        if set -q _flag_upstream
+            set upstream_api "$_flag_upstream"
+        end
+        if set -q _flag_nodeid
+            set nodeid "$_flag_nodeid"
+        end
+        if set -q _flag_port
+            set api_port "$_flag_port"
+        end
+        if set -q _flag_core_path
+            set core_path "$_flag_core_path"
+        end
+        if set -q _flag_tls_cert
+            set tls_cert "$_flag_tls_cert"
+        end
+        if set -q _flag_tls_key
+            set tls_key "$_flag_tls_key"
+        end
+        if set -q _flag_psk
+            set psk "$_flag_psk"
+        end
 
-# print init vars
-if test "$bodhi_verbose" = debug
-    logger 3 "
+        # print init vars
+        if test "$bodhi_verbose" = debug
+            logger 3 "
 bodhi_verbose => $bodhi_verbose
 bodhi_root => $loc
 bodhi_conf => $bodhi_conf
@@ -306,14 +397,19 @@ tls_cert => $tls_cert
 psk => $psk
 on_the_fly => $on_the_fly
 init => $_flag_init"
-    logger 3 "SIG => Ready to go SIR!"
-end
+            if set -q _flag_init; and set -q _flag_on_the_fly
+                logger 3 'EXTLIST => ["on_the_fly", "init"]'
+            else
+                if set -q _flag_init
+                    logger 3 'EXTLIST => ["init"]'
+                else
+                    logger 3 'EXTLIST => ["on_the_fly"]'
+                end
+            end
+            logger 3 "@bodhi.main CONT => PreFlight!"
+        end
 
-init
+        init
 
-switch $argv[1]
-    case h help
-    case v version
-    case '*'
         chamber
 end
