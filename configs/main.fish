@@ -86,15 +86,14 @@ nodeid => $nodeid
 core_path => $core_path
 tls_key => $tls_key
 tls_cert => $tls_cert
-psk => $psk
-on_the_fly => $on_the_fly
-init => $_flag_init"
+psk => $psk"
             if set -q _flag_init; and set -q _flag_on_the_fly
                 logger 3 'EXTLIST => ["on_the_fly", "init"]'
             else
                 if set -q _flag_init
                     logger 3 'EXTLIST => ["init"]'
-                else
+                end
+                if set -q _flag_on_the_fly
                     logger 3 'EXTLIST => ["on_the_fly"]'
                 end
             end
