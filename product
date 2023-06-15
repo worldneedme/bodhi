@@ -220,18 +220,19 @@ function push
                 if string match -q '*'\#'*' -- $line_stat; or string match -q '*active_conn*' -- $line_stat
                 else
                     set line_id (contains --index -- (string match -r 'auth="(.+?)"' $line_stat)[2] $basestr)
+                    set usage (math (string split ' ' -- $line_stat)[2])
                     if string match -rq uplink -- $line_stat
-                        if test -z last_upload[$line_id]
+                        if test -z $last_upload[$line_id]
                             set last_upload[$line_id] 0
                         end
-                        set upload[$line_id] (math (string split ' ' -- $line_stat)[2] - $last_upload[$line_id])
-                        set last_upload[$line_id] (string split ' ' -- $line_stat)[2]
+                        set upload[$line_id] (math $usage - $last_upload[$line_id])
+                        set last_upload[$line_id] $usage
                     else
-                        if test -z last_download[$line_id]
+                        if test -z $last_download[$line_id]
                             set last_download[$line_id] 0
                         end
-                        set download[$line_id] (math (string split ' ' -- $line_stat)[2] - $last_download[$line_id])
-                        set last_download[$line_id] (string split ' ' -- $line_stat)[2]
+                        set download[$line_id] (math $usage - $last_download[$line_id])
+                        set last_download[$line_id] $usage
                     end
                 end
             end
