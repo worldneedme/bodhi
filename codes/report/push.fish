@@ -17,8 +17,6 @@ function push
             end
         else
             # Loop to collect data High-Passly
-            set last_download 0
-            set last_upload 0
             for line_stat in (curl -sL "http://127.0.0.1:$api_port/metrics")
                 if string match -q '*'\#'*' -- $line_stat; or string match -q '*active_conn*' -- $line_stat
                 else
