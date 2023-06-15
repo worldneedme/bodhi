@@ -30,7 +30,6 @@ function chamber
     if test "$obfs" = true
         echo "{
     \"listen\": \":$server_port\",
-    \"alpn\": \"h3\",
     \"obfs\": \"$obfs\",
     \"cert\": \"$tls_cert\",
     \"prometheus_listen\": \"127.0.0.1:$api_port\",
@@ -45,7 +44,6 @@ function chamber
     else
         echo "{
     \"listen\": \":$server_port\",
-    \"alpn\": \"h3\",
     \"cert\": \"$tls_cert\",
     \"prometheus_listen\": \"127.0.0.1:$api_port\",
     \"key\": \"$tls_key\" ,
