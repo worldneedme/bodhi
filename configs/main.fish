@@ -5,13 +5,13 @@ switch $argv[1]
     case h help
         help_echo
     case v version
-        logger 0 'ThiMau@build1'
+        logger 0 'ThiMau@build2'
     case '*'
         # def var
         set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
 
         # parse argv
-        argparse -i -n $prefix i/init 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' f/on_the_fly -- $argv
+        argparse -i -n $prefix i/init 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' f/on_the_fly 'b/obfs=' -- $argv
 
         # load default settings
         set bodhi_conf config.ini
@@ -24,6 +24,7 @@ switch $argv[1]
         set tls_key /path/to/key
         set tls_cert /path/to/cert
         set psk leuleuleuleu
+        set obfs true
 
         # load settings from argv
         if set -q _flag_root
@@ -49,6 +50,7 @@ switch $argv[1]
             set tls_cert (configure "tls_cert" "$bodhi_conf")
             set tls_key (configure "tls_key" "$bodhi_conf")
             set psk (configure "psk" "$bodhi_conf")
+            set obfs (configure "obfs" "$bodhi_conf")
         end
         # load node settings from argv
 
@@ -73,6 +75,9 @@ switch $argv[1]
         if set -q _flag_psk
             set psk "$_flag_psk"
         end
+        if set -q _flag_obfs
+            set obfs "$_flag_obfs"
+        end
 
         # print init vars
         if test "$bodhi_verbose" = debug
@@ -86,7 +91,8 @@ nodeid => $nodeid
 core_path => $core_path
 tls_key => $tls_key
 tls_cert => $tls_cert
-psk => $psk"
+psk => $psk
+obfs => $obfs"
             if set -q _flag_init; and set -q _flag_on_the_fly
                 logger 3 'EXTLIST => ["on_the_fly", "init"]'
             else

@@ -12,6 +12,7 @@ A. Bedrock mode: run with config file
     tls_cert=/path/to/cert <-path to tls cert
     tls_key=/path/to/key <- path to tls key
     psk=leuleuleuleu <- password for nodeAPI
+    obfs=true/false <- enable/disable obfs in hysteria
  3. After you finish that, ./product to launch
  4. CTRL+c or SIGINT to stop bodhi safely
 
@@ -26,6 +27,7 @@ B. OTF(On The Fly) mode: run with args
     -q/--core_path= [Path to core]
     -r/--psk= [Password for nodeAPI]
     -f/--on_the_fly [Must Have when using OTF mode]
+    -b/--obfs= [enable/disable obfs in hysteria]
     
 *END' 
 end

@@ -61,6 +61,7 @@ A. Bedrock mode: run with config file
     tls_cert=/path/to/cert <-path to tls cert
     tls_key=/path/to/key <- path to tls key
     psk=leuleuleuleu <- password for nodeAPI
+    obfs=true/false <- enable/disable obfs in hysteria
  3. After you finish that, ./product to launch
  4. CTRL+c or SIGINT to stop bodhi safely
 
@@ -75,6 +76,7 @@ B. OTF(On The Fly) mode: run with args
     -q/--core_path= [Path to core]
     -r/--psk= [Password for nodeAPI]
     -f/--on_the_fly [Must Have when using OTF mode]
+    -b/--obfs= [enable/disable obfs in hysteria]
     
 *END' 
 end
@@ -132,10 +134,10 @@ function init
                                 init
                             end
                     end
-                    set PATH "$loc/bin $PATH"
+                    alias yq "$loc/bin/yq"
                 else
                     chmod +x ./bin/yq
-                    set PATH "$loc/bin $PATH"
+                    alias yq "$loc/bin/yq"
                 end
             else
                 logger 4 "@bodhi.init WARN -> lib.yq not found, fetching from gitub"
@@ -143,7 +145,7 @@ function init
                     case x86_64
                         if curl -L --progress-bar (curl -sL https://api.github.com/repos/mikefarah/yq/releases/latest | string match -e "browser" | string match -r 'https://[^"]+' | string match -e "yq_linux_amd64" | string match -vr '\.tar\.gz') -o ./bin/yq
                             chmod +x ./bin/yq
-                            set PATH "$loc/bin $PATH"
+                            alias yq "$loc/bin/yq"
                         else
                             logger 5 "@bodhi.init HALT -> Unable to fetch yq from github"
                             exit 1
@@ -151,7 +153,7 @@ function init
                     case aarch64
                         if curl -L --progress-bar (curl -sL https://api.github.com/repos/mikefarah/yq/releases/latest | string match -e "browser" | string match -r 'https://[^"]+' | string match -e "yq_linux_arm64" | string match -vr '\.tar\.gz') -o ./bin/yq
                             chmod +x ./bin/yq
-                            set PATH "$loc/bin $PATH"
+                            alias yq "$loc/bin/yq"
                         else
                             logger 5 "@bodhi.init HALT -> Unable to fetch yq from github"
                             exit 1
@@ -177,7 +179,8 @@ nodeid=1
 core_path=/path/to/core
 tls_cert=/path/to/cert
 tls_key=/path/to/key
-psk=leuleuleuleu' >"$bodhi_conf"
+psk=leuleuleuleu
+obfs=true' >"$bodhi_conf"
             logger 0 "@bodhi.init CONT -> Please modify the config file and relaunch bodhi again"
             exit 0
         end
@@ -271,7 +274,8 @@ function chamber
     set down_mbps (echo "$raw_conf" | yq .down_mbps)
     set obfs (echo "$raw_conf" | yq .obfs)
 
-    echo "{
+    if test "$obfs" = true
+        echo "{
     \"listen\": \":$server_port\",
     \"alpn\": \"h3\",
     \"obfs\": \"$obfs\",
@@ -285,13 +289,28 @@ function chamber
         }
     }
 }" >server.json
+    else
+        echo "{
+    \"listen\": \":$server_port\",
+    \"alpn\": \"h3\",
+    \"cert\": \"$tls_cert\",
+    \"prometheus_listen\": \"127.0.0.1:$api_port\",
+    \"key\": \"$tls_key\" ,
+    \"auth\": {
+        \"mode\": \"external\",
+        \"config\": {
+            \"cmd\": \"./knck\"
+        }
+    }
+}" >server.json
+    end
     echo '#!/usr/bin/fish
 if ./bin/yq \'.users[].uuid\' userlist | string match -q "$argv[2]"
 else
     exit 1
 end' >knck
     chmod +x knck
-# Launch core
+    # Launch core
     $core_path -c ./server.json server &
     if test "$bodhi_verbose" = debug
         logger 3 "@bodhi.chamber CONT -> Core Launched"
@@ -313,13 +332,13 @@ switch $argv[1]
     case h help
         help_echo
     case v version
-        logger 0 'ThiMau@build1'
+        logger 0 'ThiMau@build2'
     case '*'
         # def var
         set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
 
         # parse argv
-        argparse -i -n $prefix i/init 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' f/on_the_fly -- $argv
+        argparse -i -n $prefix i/init 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' f/on_the_fly 'b/obfs=' -- $argv
 
         # load default settings
         set bodhi_conf config.ini
@@ -332,6 +351,7 @@ switch $argv[1]
         set tls_key /path/to/key
         set tls_cert /path/to/cert
         set psk leuleuleuleu
+        set obfs true
 
         # load settings from argv
         if set -q _flag_root
@@ -357,6 +377,7 @@ switch $argv[1]
             set tls_cert (configure "tls_cert" "$bodhi_conf")
             set tls_key (configure "tls_key" "$bodhi_conf")
             set psk (configure "psk" "$bodhi_conf")
+            set obfs (configure "obfs" "$bodhi_conf")
         end
         # load node settings from argv
 
@@ -381,6 +402,9 @@ switch $argv[1]
         if set -q _flag_psk
             set psk "$_flag_psk"
         end
+        if set -q _flag_obfs
+            set obfs "$_flag_obfs"
+        end
 
         # print init vars
         if test "$bodhi_verbose" = debug
@@ -394,7 +418,8 @@ nodeid => $nodeid
 core_path => $core_path
 tls_key => $tls_key
 tls_cert => $tls_cert
-psk => $psk"
+psk => $psk
+obfs => $obfs"
             if set -q _flag_init; and set -q _flag_on_the_fly
                 logger 3 'EXTLIST => ["on_the_fly", "init"]'
             else

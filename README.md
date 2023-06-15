@@ -1,11 +1,11 @@
 # bodhi
 Open source hysteria backend for v2board
 
-Setup at https://github.com/lotusproxy/bodhi-docker
+Install with **Docker compose** at https://github.com/lotusproxy/bodhi-docker
 
 # How to use?
 
-Extremly ProTIP: if you're using bodhi-docker please use bedrock mode
+SuperProTip: Only mode A is supported in bodhi-docker
 
 ```
 A. Bedrock mode: run with config file
@@ -18,6 +18,7 @@ A. Bedrock mode: run with config file
     tls_cert=/path/to/cert <-path to tls cert
     tls_key=/path/to/key <- path to tls key
     psk=leuleuleuleu <- password for nodeAPI
+    obfs=true/false <- enable/disable obfs in hysteria
  3. After you finish that, ./product to launch
  4. CTRL+c or SIGINT to stop bodhi safely
 
@@ -32,6 +33,7 @@ B. OTF(On The Fly) mode: run with args
     -q/--core_path= [Path to core]
     -r/--psk= [Password for nodeAPI]
     -f/--on_the_fly [Must Have when using OTF mode]
+    -b/--obfs= [enable/disable obfs in hysteria]
 ```
 ProTip: Ctrl+C to stop
 
@@ -40,5 +42,5 @@ ProTip: Ctrl+C to stop
 Todo:
 
 - ~~User Reports~~
-- Docker
+- ~~Docker~~
 - Dynamic update

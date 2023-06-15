@@ -27,10 +27,10 @@ function init
                                 init
                             end
                     end
-                    set PATH "$loc/bin $PATH"
+                    alias yq "$loc/bin/yq"
                 else
                     chmod +x ./bin/yq
-                    set PATH "$loc/bin $PATH"
+                    alias yq "$loc/bin/yq"
                 end
             else
                 logger 4 "@bodhi.init WARN -> lib.yq not found, fetching from gitub"
@@ -38,7 +38,7 @@ function init
                     case x86_64
                         if curl -L --progress-bar (curl -sL https://api.github.com/repos/mikefarah/yq/releases/latest | string match -e "browser" | string match -r 'https://[^"]+' | string match -e "yq_linux_amd64" | string match -vr '\.tar\.gz') -o ./bin/yq
                             chmod +x ./bin/yq
-                            set PATH "$loc/bin $PATH"
+                            alias yq "$loc/bin/yq"
                         else
                             logger 5 "@bodhi.init HALT -> Unable to fetch yq from github"
                             exit 1
@@ -46,7 +46,7 @@ function init
                     case aarch64
                         if curl -L --progress-bar (curl -sL https://api.github.com/repos/mikefarah/yq/releases/latest | string match -e "browser" | string match -r 'https://[^"]+' | string match -e "yq_linux_arm64" | string match -vr '\.tar\.gz') -o ./bin/yq
                             chmod +x ./bin/yq
-                            set PATH "$loc/bin $PATH"
+                            alias yq "$loc/bin/yq"
                         else
                             logger 5 "@bodhi.init HALT -> Unable to fetch yq from github"
                             exit 1
@@ -72,7 +72,8 @@ nodeid=1
 core_path=/path/to/core
 tls_cert=/path/to/cert
 tls_key=/path/to/key
-psk=leuleuleuleu' >"$bodhi_conf"
+psk=leuleuleuleu
+obfs=true' >"$bodhi_conf"
             logger 0 "@bodhi.init CONT -> Please modify the config file and relaunch bodhi again"
             exit 0
         end

@@ -27,7 +27,8 @@ function chamber
     set down_mbps (echo "$raw_conf" | yq .down_mbps)
     set obfs (echo "$raw_conf" | yq .obfs)
 
-    echo "{
+    if test "$obfs" = true
+        echo "{
     \"listen\": \":$server_port\",
     \"alpn\": \"h3\",
     \"obfs\": \"$obfs\",
@@ -41,13 +42,28 @@ function chamber
         }
     }
 }" >server.json
+    else
+        echo "{
+    \"listen\": \":$server_port\",
+    \"alpn\": \"h3\",
+    \"cert\": \"$tls_cert\",
+    \"prometheus_listen\": \"127.0.0.1:$api_port\",
+    \"key\": \"$tls_key\" ,
+    \"auth\": {
+        \"mode\": \"external\",
+        \"config\": {
+            \"cmd\": \"./knck\"
+        }
+    }
+}" >server.json
+    end
     echo '#!/usr/bin/fish
 if ./bin/yq \'.users[].uuid\' userlist | string match -q "$argv[2]"
 else
     exit 1
 end' >knck
     chmod +x knck
-# Launch core
+    # Launch core
     $core_path -c ./server.json server &
     if test "$bodhi_verbose" = debug
         logger 3 "@bodhi.chamber CONT -> Core Launched"
