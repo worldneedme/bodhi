@@ -69,9 +69,5 @@ end' >knck
     trap handle_stop SIGTSTP
     trap handle_stop SIGTERM
     trap handle_stop SIGINT
-    while true
-        curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
-        push
-        sleep 60
-    end
+    push
 end
