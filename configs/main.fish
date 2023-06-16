@@ -8,7 +8,7 @@ switch $argv[1]
         logger 0 'ThiMau@build4'
     case '*'
         # def var
-        set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk raw_conf_base64 raw_conf_base64_check last_core_pid push_interval
+        set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
 
         # parse argv
         argparse -i -n $prefix i/init 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' f/on_the_fly 'b/obfs=' -- $argv
@@ -80,7 +80,7 @@ switch $argv[1]
         end
 
         # Final check
-        if string sub -s -1 "$upstream_api" = /
+        if test (string sub -s -1 "$upstream_api") = /
             set length (string length "$upstream_api")
             set upstream_api (string sub -e (math $length - 1) "$upstream_api")
         end

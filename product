@@ -199,8 +199,9 @@ end
 
 function push
     while true
-        sleep $push_interval
+        sleep $argv[1]
         curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
+        set raw_conf_md5_check (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk" | md5sum | string split ' ')[1]
         # Create UserTable
         set users (yq '.users[].id' userlist)
         # Map id <=> uuid <=> base64_authstr
@@ -212,7 +213,11 @@ function push
         set raw_statis (curl -sL "http://127.0.0.1:$api_port/metrics" | string collect)
         if test -z $raw_statis
             if test "$bodhi_verbose" = debug
-                logger 3 "@bodhi.push CONT -> No user, report empty"
+                logger 3 "@bodhi.push CONT -> No usage, skip reporting"
+            end
+            if test "$raw_conf_md5_check" != "$argv[3]"
+                logger 4 "@bodhi.push WARN -> New config from panel arrived, re-init server"
+                break
             end
         else
             # Loop to collect data High-Passly
@@ -252,14 +257,13 @@ $return_data"
             # Report data to panel
             set clength (echo -n "$return_data" | wc -c)
             curl -sL -X POST -H "Content-Type: application/json" -H "Content-Length: $clength" -d "$return_data" "$upstream_api/api/v1/server/UniProxy/push?node_id=$nodeid&node_type=hysteria&token=$psk" | yq
-            set raw_conf_base64_check (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk" | base64)
-            if test "$raw_conf_base64_check" != "$raw_conf_base64"
+            if test "$raw_conf_md5_check" != "$argv[3]"
                 logger 4 "@bodhi.push WARN -> New config from panel arrived, re-init server"
                 break
             end
         end
     end
-    kill $last_core_pid
+    kill $argv[2]
     rm -f userlist server.json knck stop
     chamber
 end
@@ -273,7 +277,7 @@ function chamber
         logger 3 "@bodhi.chamber CONT -> Fetching INIT Data"
     end
     if set raw_conf (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk")
-        set raw_conf_base64 (echo "$raw_conf" | base64)
+        set raw_conf_md5 (echo -n "$raw_conf" | md5sum | string split ' ')[1]
     else
         logger 5 "@bodhi.chamber HALT -> Can't fetch init conf, abort"
         exit 1
@@ -337,8 +341,8 @@ end' >knck
     end
     trap handle_stop SIGTSTP
     trap handle_stop SIGTERM
-    trap handle_stop SIGINT
-    push
+    trap handle_stop SIGINT 
+    push $push_interval $last_core_pid $raw_conf_md5
 end
 
 #-> use: ["init", "chamber"]
@@ -351,7 +355,7 @@ switch $argv[1]
         logger 0 'ThiMau@build4'
     case '*'
         # def var
-        set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk raw_conf_base64 raw_conf_base64_check last_core_pid push_interval
+        set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
 
         # parse argv
         argparse -i -n $prefix i/init 'c/conf=' 'v/verbose=' 'd/root=' 'p/port=' 'u/upstream=' 'n/nodeid=' 'o/tls_cert=' 'k/tls_key=' 'q/core_path=' 'r/psk=' f/on_the_fly 'b/obfs=' -- $argv
@@ -423,7 +427,7 @@ switch $argv[1]
         end
 
         # Final check
-        if string sub -s -1 "$upstream_api" = /
+        if test (string sub -s -1 "$upstream_api") = /
             set length (string length "$upstream_api")
             set upstream_api (string sub -e (math $length - 1) "$upstream_api")
         end

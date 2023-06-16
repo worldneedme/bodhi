@@ -7,7 +7,7 @@ function chamber
         logger 3 "@bodhi.chamber CONT -> Fetching INIT Data"
     end
     if set raw_conf (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk")
-        set raw_conf_base64 (echo "$raw_conf" | base64)
+        set raw_conf_md5 (echo -n "$raw_conf" | md5sum | string split ' ')[1]
     else
         logger 5 "@bodhi.chamber HALT -> Can't fetch init conf, abort"
         exit 1
@@ -71,6 +71,6 @@ end' >knck
     end
     trap handle_stop SIGTSTP
     trap handle_stop SIGTERM
-    trap handle_stop SIGINT
-    push
+    trap handle_stop SIGINT 
+    push $push_interval $last_core_pid $raw_conf_md5
 end

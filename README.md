@@ -43,4 +43,4 @@ Todo:
 
 - ~~User Reports~~
 - ~~Docker~~
-- Dynamic update
+- ~~Dynamic update~~

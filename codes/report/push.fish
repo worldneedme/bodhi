@@ -1,7 +1,8 @@
 function push
     while true
-        sleep $push_interval
+        sleep $argv[1]
         curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
+        set raw_conf_md5_check (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk" | md5sum | string split ' ')[1]
         # Create UserTable
         set users (yq '.users[].id' userlist)
         # Map id <=> uuid <=> base64_authstr
@@ -13,7 +14,11 @@ function push
         set raw_statis (curl -sL "http://127.0.0.1:$api_port/metrics" | string collect)
         if test -z $raw_statis
             if test "$bodhi_verbose" = debug
-                logger 3 "@bodhi.push CONT -> No user, report empty"
+                logger 3 "@bodhi.push CONT -> No usage, skip reporting"
+            end
+            if test "$raw_conf_md5_check" != "$argv[3]"
+                logger 4 "@bodhi.push WARN -> New config from panel arrived, re-init server"
+                break
             end
         else
             # Loop to collect data High-Passly
@@ -53,14 +58,13 @@ $return_data"
             # Report data to panel
             set clength (echo -n "$return_data" | wc -c)
             curl -sL -X POST -H "Content-Type: application/json" -H "Content-Length: $clength" -d "$return_data" "$upstream_api/api/v1/server/UniProxy/push?node_id=$nodeid&node_type=hysteria&token=$psk" | yq
-            set raw_conf_base64_check (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk" | base64)
-            if test "$raw_conf_base64_check" != "$raw_conf_base64"
+            if test "$raw_conf_md5_check" != "$argv[3]"
                 logger 4 "@bodhi.push WARN -> New config from panel arrived, re-init server"
                 break
             end
         end
     end
-    kill $last_core_pid
+    kill $argv[2]
     rm -f userlist server.json knck stop
     chamber
 end
