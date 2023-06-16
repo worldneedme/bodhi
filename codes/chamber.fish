@@ -7,6 +7,7 @@ function chamber
         logger 3 "@bodhi.chamber CONT -> Fetching INIT Data"
     end
     if set raw_conf (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk")
+        set raw_conf_base64 (echo "$raw_conf" | base64)
     else
         logger 5 "@bodhi.chamber HALT -> Can't fetch init conf, abort"
         exit 1
@@ -26,6 +27,7 @@ function chamber
     set up_mbps (echo "$raw_conf" | yq .up_mbps)
     set down_mbps (echo "$raw_conf" | yq .down_mbps)
     set obfs (echo "$raw_conf" | yq .obfs)
+    set push_interval (echo "$raw_conf" | yq .base_config.push_interval)
 
     if test "$obfs" = true
         echo "{
@@ -63,6 +65,7 @@ end' >knck
     chmod +x knck
     # Launch core
     $core_path -c ./server.json server &
+    set last_core_pid $last_pid
     if test "$bodhi_verbose" = debug
         logger 3 "@bodhi.chamber CONT -> Core Launched"
     end

@@ -1,6 +1,6 @@
 function push
     while true
-        sleep 60
+        sleep $push_interval
         curl -sL "$upstream_api/api/v1/server/UniProxy/user?node_id=$nodeid&node_type=hysteria&token=$psk" -o userlist
         # Create UserTable
         set users (yq '.users[].id' userlist)
@@ -53,6 +53,14 @@ $return_data"
             # Report data to panel
             set clength (echo -n "$return_data" | wc -c)
             curl -sL -X POST -H "Content-Type: application/json" -H "Content-Length: $clength" -d "$return_data" "$upstream_api/api/v1/server/UniProxy/push?node_id=$nodeid&node_type=hysteria&token=$psk" | yq
+            set raw_conf_base64_check (curl -sL "$upstream_api/api/v1/server/UniProxy/config?node_id=$nodeid&node_type=hysteria&token=$psk" | base64)
+            if test "$raw_conf_base64_check" != "$raw_conf_base64"
+                logger 4 "@bodhi.push WARN -> New config from panel arrived, re-init server"
+                break
+            end
         end
     end
+    kill $last_core_pid
+    rm -f userlist server.json knck stop
+    chamber
 end
