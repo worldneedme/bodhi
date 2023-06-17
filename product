@@ -246,7 +246,10 @@ function push
             for user in $users
                 if test -z $upload[$user]; and test -z $download[$user]
                 else
-                    set return_data (echo -n "$return_data" | yq -o=json ".$user = [$upload[$user], $download[$user]]")
+                    if test $upload[$user] = 0; and test $download[$user] = 0
+                    else
+                        set return_data (echo -n "$return_data" | yq -o=json ".$user = [$upload[$user], $download[$user]]")
+                    end
                 end
             end
             if test "$bodhi_verbose" = debug
@@ -255,8 +258,14 @@ function push
 $return_data"
             end
             # Report data to panel
-            set clength (echo -n "$return_data" | wc -c)
-            curl -sL -X POST -H "Content-Type: application/json" -H "Content-Length: $clength" -d "$return_data" "$upstream_api/api/v1/server/UniProxy/push?node_id=$nodeid&node_type=hysteria&token=$psk" | yq
+            if test "$return_data" = '{}'
+                if test "$bodhi_verbose" = debug
+                    logger 3 "@bodhi.push CONT -> No usage, skip reporting"
+                end
+            else
+                set clength (echo -n "$return_data" | wc -c)
+                curl -sL -X POST -H "Content-Type: application/json" -H "Content-Length: $clength" -d "$return_data" "$upstream_api/api/v1/server/UniProxy/push?node_id=$nodeid&node_type=hysteria&token=$psk" | yq
+            end
             if test "$raw_conf_md5_check" != "$argv[3]"
                 logger 4 "@bodhi.push WARN -> New config from panel arrived, re-init server"
                 break
@@ -352,7 +361,7 @@ switch $argv[1]
     case h help
         help_echo
     case v version
-        logger 0 'ThiMau@build4'
+        logger 0 'ThiMau@build5'
     case '*'
         # def var
         set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk

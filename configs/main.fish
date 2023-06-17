@@ -5,7 +5,7 @@ switch $argv[1]
     case h help
         help_echo
     case v version
-        logger 0 'ThiMau@build4'
+        logger 0 'ThiMau@build5'
     case '*'
         # def var
         set -x bodhi_conf bodhi_root bodhi_verbose upstream_api api_port loc tls_cert nodeid tls_key psk
