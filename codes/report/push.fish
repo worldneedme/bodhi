@@ -55,8 +55,7 @@ function push
             end
             if test "$bodhi_verbose" = debug
                 logger 3 "@bodhi.push CONT -> Ready to push with following data"
-                logger 3 "
-$return_data"
+                logger 3 "$return_data"
             end
             # Report data to panel
             if test "$return_data" = '{}'

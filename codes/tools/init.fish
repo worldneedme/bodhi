@@ -78,7 +78,13 @@ obfs=true' >"$bodhi_conf"
             exit 0
         end
     end
+    # Check TLSnec
     # Check core
+    if test -e $tls_cert; and test -e $tls_key
+    else
+        logger 5 "@bodhi.init HALT -> TLS cert or TLS key is not found at bodhi.tls_x"
+        exit 1
+    end
     if test -e "$core_path"
         if test -x "$core_path"
         else
