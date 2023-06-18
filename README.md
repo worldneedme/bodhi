@@ -1,3 +1,5 @@
+# **Warning: Please do migrate to ThiMau@build5 due to a recently fixed bug which is related to usage report**
+
 # bodhi
 Open source hysteria backend for v2board
 
