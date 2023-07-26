@@ -3,8 +3,7 @@
 # bodhi
 Open source hysteria backend for v2board
 
-Install with **Docker compose** at https://github.com/lotusproxy/bodhi-docker
-
+Install with **Docker compose** at https://lotusproxy.github.io
 # How to use?
 
 SuperProTip: Only mode A is supported in bodhi-docker
